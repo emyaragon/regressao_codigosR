@@ -1,0 +1,161 @@
+---
+title: "Questão 3"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+```{r include=FALSE}
+require(alr4)
+attach(oldfaith)
+summary(oldfaith)
+require(robustbase)
+require(ggplot2)
+require(gamlss)
+
+```
+
+
+```{r echo=FALSE}
+nDuration = Duration/100
+
+plot(density(Interval), main="Distribuição da variável Interval", ylab = "Densidade", xlab="Tempo de Intervalo")
+```
+
+```{r echo=FALSE}
+adjbox(Interval, ylab="Tempo de intervalo")
+```
+
+```{r echo=FALSE}
+ggplot(mapping = aes(x=nDuration, y=Interval)) +
+  geom_point() +
+  geom_smooth(method=lm, formula = y~poly(x, 5) , color="red", se=FALSE)
+```
+**Comentário:** Identificamos uma mudança no ponto 1.75 onde a curva de tendência muda de uma quadrática para uma cúbica. \newpage
+
+
+### Modelo
+```{r}
+
+x1 = nDuration
+x2= nDuration^2
+xt3 = (nDuration >= 1.75)*nDuration^3
+
+fit1 =  lm(Interval~x1+x2+xt3)
+
+summary(fit1)
+```
+. \newpage
+
+### Diagnóstico do modelo
+```{r echo=FALSE, fig.show="hold", out.width="50%"}
+fit.model = fit1
+
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=18, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=2)
+#-----------------------------------------------------------------------#
+ 
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+```
+**Comentário:** O modelo está aparentemente bem ajustado apesar de que há alguns pontos quase escapando da banda de confiança na parte inferior do gráfico. Quanto a variância dos resíduos, ela é constante. \newpage
+
+
+
+### Banda de confiança
+
+A banda de confiança para $\hat{y}(\mathbf{z})$ é definida como $$[\mathbf{z}^\intercal\beta \pm \sqrt{c_\alpha}s(1+\mathbf{z^\intercal(X^\intercal X)^{-1}z})^{\frac{1}{2}}]$$
+```{r echo=FALSE}
+z <- seq(0.5, 3.5, length.out = 400)
+z2= z^2
+zt3 = (z >= 1.75)*z^3
+
+Z <- cbind(1, z, z2, zt3)
+beta <- fit1$coefficients
+c_a <- qchisq(0.95, df = p)
+
+conta <- t(Z[1,])%*%solve(t(X)%*%X)%*%Z[1,]
+bdc_sup <- t(Z[1,])%*%beta + sqrt(c_a)*s*sqrt(1 + conta)
+bdc_inf <- t(Z[1,])%*%beta - sqrt(c_a)*s*sqrt(1 + conta)
+
+for(i in 2:400){
+  conta <- t(Z[i,])%*%solve(t(X)%*%X)%*%Z[i,]
+  bdc_sup <- c(bdc_sup, t(Z[i,])%*%beta + sqrt(c_a)*s*sqrt(1 + conta))
+  bdc_inf <- c(bdc_inf, t(Z[i,])%*%beta - sqrt(c_a)*s*sqrt(1 + conta))
+}
+u <- Z%*%beta
+
+dataplot <- as.data.frame(cbind(z, u, bdc_inf, bdc_sup))
+```
+
+
+```{r echo=FALSE}
+ggplot(dataplot, aes(x = z, y = V2)) +
+  geom_ribbon(aes(ymin = bdc_inf, ymax = bdc_sup), alpha = 0.2) +
+  geom_line() + ylab("Intervalo predito") + xlab("Tempo da última duração")
+```
+. \newpage
+
+### Modelo com GAMLSS
+```{r echo=FALSE, fig.show="hold"}
+fit2 <- gamlss(Interval~pb(nDuration))
+
+ggplot(mapping = aes(x=nDuration, y=fitted(fit2))) +
+  geom_line(color="red") + geom_point(mapping = aes(x=nDuration, y=Interval))
+
+plot(fit2)
+```
+

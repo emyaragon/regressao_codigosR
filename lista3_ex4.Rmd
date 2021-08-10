@@ -1,0 +1,152 @@
+---
+title: "Questão 4"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(robustbase)
+library(ggplot2)
+library(alr4)
+library(olsrr)
+data("BGSgirls")
+attach(BGSgirls)
+```
+
+### Análise descritiva
+```{r, fig.show='hold'}
+adjbox(BMI18, ylab="BMI18")
+
+plot(density(BMI18), xlab="BMI18", main="A distribuição da variável
+     resposta é \nassimétrica a direita")
+```
+
+
+
+```{r echo=FALSE}
+pairs(BGSgirls[,c(3, 5, 7, 9, 11)], panel = panel.smooth, pch=16)
+
+```
+
+**Comentário:** Aparentemente há uma relação linear positiva e entre a variável resposta e as demais variáveis explicativas.
+
+
+**Matrix de covariância**
+```{r echo=FALSE}
+cor(BGSgirls[,c(3, 5, 7, 9, 11)])
+```
+
+**Comentário:** A correlações entre as variáveis explicativas e a resposta são médias e altas. As correlações mais altas são obtidas com as medidas coletadas aos 18 anos, já as de grau médio são obtidas com a medidas coletadas aos 9 anos de idade. Além disso, observamos uma alta correlação entre as variáveis $\mathbf{WT9}$ e $\mathbf{LG9}$ \newpage
+
+
+### Modelo
+```{r}
+
+fit1 <- lm(BMI18~LG9+WT9+LG18+WT18)
+
+summary(fit1)
+```
+. \newpage
+
+
+### Diagnóstico do Modelo
+```{r echo=FALSE, fig.show='hold', out.width="50%"}
+fit.model = fit1
+
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=18, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=2)
+#-----------------------------------------------------------------------#
+ 
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+```
+**Comentário:** pela distribuição dos pontos na banda de confiança, podemos dizer que o ajuste não foi dos melhores. alguns pontos mais ao centro escaparam um pouco da banda de confiança e uma observação saiu completamente. 
+
+
+### VIF
+```{r echo=FALSE}
+vif(fit1)
+
+```
+**Comentário:** Pelo VIF, há indícios de que a variância da variável LG9 esteja inflacionada devido o alta colinariedade.
+
+
+### Número da condição
+```{r echo=FALSE}
+kappa(fit1, exact=TRUE)
+        
+```
+**Comentário:** Há indícios fortes de multicolinariedade, pois o número da condição é maior que 1000. \newpage
+
+
+### Regressão Ridge
+
+**Selecionando k**
+```{r echo=FALSE}
+require(MASS)
+
+select(lm.ridge(BMI18 ~ LG18 + LG9 + WT18 + WT9, lambda=seq(0, 2, 0.01)))
+```
+
+**Regressão ridge com k escolhido**
+```{r}
+fit2 <- lm.ridge(BMI18 ~ LG18 + LG9 + WT18 + WT9, lambda = 0.6697)
+fit2
+
+```
+

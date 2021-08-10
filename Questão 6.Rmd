@@ -1,0 +1,198 @@
+---
+title: "Lista 1"
+author: "Emerson Aragão"
+date: "21/05/2021"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  word_document: default
+---
+```{r}
+library(knitr)
+library(formatR)
+library()
+opts_chunk$set(tidy.opts=list(width.cutoff=40),tidy=TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+library(MASS)
+library(gamlss)
+library(robustbase)
+data <- Cars93
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+summary(data)
+attach(data)
+```
+
+
+```{r}
+#Diagrama de dispersão com tendência 
+plot(x = Weight,y = MPG.highway, col= "blue", 
+     main = "Desempenho (mpg) x Peso (libras)", pch = 18,
+     xlab = "Peso", ylab="Desempenho em estradas")
+lines(smooth.spline(Weight, MPG.highway,df=3))
+```
+
+**comentário:** Aparentemente existe uma forte relação  entre o peso do veículo e seu desempenho. Pelo gráfico de dispersão, vemos que quanto maior o peso, menor o desempenho. Aplicando uma linha de tendência de grau 3, observamos a relação entre as variáveis parece ser quadrática.   
+
+```{r, fig.show='hold', out.width='50%'}
+#Boxplots robustos
+adjbox(MPG.highway, ylab="Desempenho (mpg)")
+adjbox(Weight, ylab = "Peso")
+
+#densidade da variável resposta
+plot(density(MPG.highway), xlab="Desempenho (mpg)", ylab="Densidade",
+     main="")
+```
+
+**comentário:** Analisando o boxplot e o gráfico da densidade da variável resposta, vemos que existe uma assimetria a direita e alguns pontos são considerados discrepantes, tanto acima quanto abaixo. A distribuição da variável explicativa se mostra mais simétrica e tem apenas um ponto outlier.
+
+```{r}
+sweight = (Weight - mean(Weight))/sd(Weight)#padronizando a variável Weight
+fit1.cars = lm(MPG.highway~sweight)
+
+summary(fit1.cars)
+```
+
+### Análise de resíduos
+
+```{r echo=FALSE}
+X <- model.matrix(fit1.cars)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit1.cars)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit1.cars)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit1.cars),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-0.5,a+0.5), pch=18,)
+lines(smooth.spline(fitted(fit1.cars), tsi, df=3), col="red")
+```
+
+```{r echo=FALSE, fig.align="center"}
+par(mfrow=c(1,1))
+X <- model.matrix(fit1.cars)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit1.cars)$sigma
+r <- resid(fit1.cars)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="s")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=FALSE,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(e2,axes=FALSE,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(med,axes=FALSE,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=2)
+```
+
+**Comentário:** O gráfico dos resíduos studentizados pelos valores ajustados indica uma variância constante para valores mais baixos da variável resposta, porém notamos que essa variância aumenta para valores altos (a partir de 32). Além disso, o gráfico de envelope mostra a maioria dos pontos dentro da banda de confiança, porém com dois pontos fora nas bordas e alguns pontos mais ao centro quase saindo. Isso pode indicar que os erros não são normais ou que o ajuste está sendo afetado por pontos discrepantes. Em vista disso, vamos ajustar um novo modelo considerando valores quadráticos da variável peso.
+
+
+```{r}
+sweight2 <- I(sweight^2)
+
+fit2.cars = lm(MPG.highway~sweight + sweight2)
+
+summary(fit2.cars)
+```
+```{r}
+X <- model.matrix(fit2.cars)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit2.cars)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit2.cars)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit2.cars),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-0.5,a+0.5), pch=18,)
+lines(smooth.spline(fitted(fit2.cars), tsi, df=3), col="red")
+
+```
+```{r}
+par(mfrow=c(1,1))
+X <- model.matrix(fit2.cars)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit2.cars)$sigma
+r <- resid(fit2.cars)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="s")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=FALSE,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(e2,axes=FALSE,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=2)
+par(new=TRUE)
+qqnorm(med,axes=FALSE,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=2)
+```
+

@@ -1,0 +1,42 @@
+---
+title: "Questão 6"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r include=FALSE}
+library(faraway)
+library(robustbase)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+attach(motorins)
+summary(motorins)
+```
+```{r}
+logperd <- log(perd)
+adjbox(logperd~Zone)
+```
+
+A distribuição de $log(perd)$ é semelhante em todos os níveis de **Zone**, sendo o boxplot do sétimo nível o que mais difere dos outros. Além disso, temos outliers em todos os níveis. \newpage
+
+**Modelo e tabela ANOVA**
+```{r}
+fit1.motor = aov(log(perd) ~ Zone)
+
+summary(fit1.motor)
+
+```
+O p-valor extramamente pequeno indica que há indícios de diferença entre as médias dos grupos. \newline
+
+**Teste de Tukey**
+```{r fig.show="hold", results="hold"}
+tukey <- TukeyHSD(fit1.motor)
+tukey
+plot(tukey)
+```
+Considerando um nível de significância de 5%, todos as comparações com o grupo 7 resultaram em diferenças significativas. Além dessas, a diferença entre as médias dos grupos 2 e 4 também foi significativa
+
+

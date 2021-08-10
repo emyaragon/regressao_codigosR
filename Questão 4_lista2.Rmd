@@ -1,0 +1,219 @@
+---
+title: "Lista 2 - Análise Estatística"
+author: "Emerson Silva Aragão | NUSP: 11371583"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Questão 4
+```{r include=FALSE}
+library(alr4)
+library(ggplot2)
+library(MASS)
+
+BigMac1 <- BigMac2003
+attach(BigMac1)
+```
+
+```{r}
+summary(BigMac1)
+```
+.  \newline 
+**Plot de densidades da variável resposta original e transformada**
+```{r echo=FALSE, fig.show='hold', out.width="50%"}
+y <- BigMac
+logy <- log(BigMac)
+
+plot(density(y), xlab = "Preço BigMac", main = "A variável resposta é assimétrica a direita", cex.main = 0.97)
+
+plot(density(logy),xlab = "Log do Preço BigMac", main = "A densidade do logaritmo da variável resposta ainda é \nlevemente assimétrica", cex.main = 0.97)
+```
+Há assimetria tanto nos valores transformados quanto nos originais, porém a transformação usando log amenizou a assimetria e deixou os valores mais concentrados em torno da média. Portanto, usar o logaritimo da variável resposta é uma opção melhor ao aplicar um modelo gaussiano. 
+
+**Gráficos de dispersão** 
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+ggplot(mapping = aes(logy, Bread)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quase linear entre log do preço do BigMac e preço do pão")
+
+ggplot(mapping = aes(logy, Rice)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle("Relação quadrática entre o log do preço do BigMac e preço o arroz")
+```
+
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+ggplot(mapping = aes(logy, FoodIndex)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quadrática entre o log do preço do BigMac e o índice  \nde preços de alimentos")
+
+ggplot(mapping = aes(logy, Bus)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quadrática entre o log do preço do BigMac e o \npreço da passagem de ônibus")
+```
+
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+ggplot(mapping = aes(logy, Apt)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quadrática entre o log do preço do BigMac e o valor do aluguel")
+
+ggplot(mapping = aes(logy, TeachGI)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quadrática entre o log do preço do BigMac e o salário bruto \nde um professor do ensino fundamental")
+```
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+ggplot(mapping = aes(logy, TeachNI)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação quadrática entre o log do preço do BigMac e \no salário liquido de um professor do ensino fundamental")
+
+ggplot(mapping = aes(logy, TeachHours)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação fraca entre o Log do preço do BigMac e a \ncarga horária de um professor do ensino fundamental")
+```
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+ggplot(mapping = aes(logy, TaxRate)) + geom_point() + stat_smooth(method = "lm", formula = y~poly(x, 3), se=F)+ xlab("Log BigMac") + ggtitle( "Relação cúbica fraca entre o log do preço do BigMac e o imposto \npago por um professor do ensino fundamental")
+```
+
+Vemos que a maioria das variáveis explicatívas apresenta correlação negativa com a variável resposta. As variáveis que fogem dessa regra são *Bread*, *Rice* e *TeachHours*. \newline
+
+
+**Seleção do modelo**
+```{r include=FALSE}
+padr_Bread <- (Bread - mean(Bread))/sd(Bread)
+padr_Rice <- (Rice - mean(Rice))/sd(Rice)
+padr_FoodIndex <- (FoodIndex - mean(FoodIndex))/sd(FoodIndex)
+padr_bus <- (Bus - mean(Bus))/sd(Bus)
+padr_Apt <- (Apt - mean(Apt))/sd(Apt)
+padr_TeachGI <- (TeachGI - mean(TeachGI))/sd(TeachGI)
+padr_TeachNI <- (TeachNI - mean(TeachNI))/sd(TeachNI)
+padr_TaxRate <- (TaxRate - mean(TaxRate))/sd(TaxRate)
+padr_TeachHours <- (TeachHours - mean(TeachHours))/sd(TeachHours)
+
+df = data.frame(logy, padr_Apt, padr_Bread, padr_bus, padr_FoodIndex,
+                padr_Rice, padr_TaxRate, padr_TeachGI, padr_TeachHours,
+                padr_TeachNI)
+```
+
+
+
+
+```{r}
+modelo <- lm(df$logy~., data=df)
+
+modelAIC <- stepAIC(modelo, trace=0)
+summary(modelAIC)
+```
+.\newline 
+
+**Gráficos de resíduo**
+
+
+```{r echo=FALSE, fig.show='hold', warning=FALSE, out.width="50%"}
+fit.model = modelAIC
+#Gráfico resíduos
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+
+#envelope
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=1)
+```
+
+As suposições de variância constante e normalidade dos erros parece ser satisfeita para o modelo selecionado. Todos os resíduos caíram dentro da banda de confiança, indícios de que o modelo está bem ajustado. \newline
+
+**Análise de sensibilidade**
+
+```{r echo=FALSE, results="hold"}
+#Distância de Cook
+#-----------------------------------------------------------------------#
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(di,xlab="Indice", ylab="Distancia de Cook", pch=16)
+cut = mean(di) + 3*sd(di)
+abline(cut,0,lty=2)
+
+indice <- 1:69
+indice[di > cut]
+```
+
+O gráfico da Distância de Cook apontou as observações 45 e 57 como possíveis pontos influentes. Vamos rodar o modelo selecionado sem esses pontos para verificar se há grandes mudanças nos coeficientes.
+
+**Modelo sem a 45ª observação**
+```{r echo=FALSE}
+#Análise de sensibilidade
+mod1 <- lm(formula = logy ~ padr_Bread + padr_FoodIndex + padr_Rice + 
+    padr_TaxRate + padr_TeachNI, data = subset(df, subset = 1:69!=45))
+
+summary(mod1)
+```
+
+A variável **TeachNI** deixa de ser significativa ao tirar a 45ª observação. \newline
+
+**Modelo sem a 57ª observação**
+```{r}
+#Análise de sensibilidade
+mod1 <- lm(formula = logy ~ padr_Bread + padr_FoodIndex + padr_Rice + 
+    padr_TaxRate + padr_TeachNI, data = subset(df, subset = 1:69!=57))
+
+summary(mod1)
+```
+
+As variáveis **TaxRate** e **TeachNI** deixam de ser significativas a nível de 5% após a retirada da 57ª observação. Portanto, as duas observações discrepantes parecem ser pontos influentes. \newline
+
+**interpretação dos coeficientes**
+```{r}
+summary(modelAIC)
+```
+
+Os coeficientes obtidos para as variáveis explicatívas padronizadas podem ser interpretados como os efeitos das variáveis explicativas na variável resposta quando elas diferem de suas respectivas médias por um desvio-padrão. 
+
+
+

@@ -1,0 +1,255 @@
+---
+title: "Questão 5"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r include=FALSE}
+library(ggplot2)
+library(robustbase)
+library(tidyverse)
+```
+
+
+
+```{r include=FALSE}
+vidros = read.table("vidros.txt", header = T)
+attach(vidros)
+voltagem = factor(voltagem)
+temperatura = factor(temperatura)
+```
+
+
+```{r, fig.show='hold', out.width="50%"}
+
+adjbox(resistencia~voltagem, xlab="Voltagem", ylab="Resistência")
+adjbox(resistencia~temperatura, xlab="Temperatura", ylab="Resistência")
+```
+Pelo boxplot, podemos ver que os níveis de voltagem tem uma relação forte com a resistência. Quanto menor a voltagem, maior o tempo de resistência.
+
+```{r echo=FALSE, fig.show='hold'}
+plot(density(resistencia), main = "A distribuição da variável resistência é bimodal", xlab="Resistência")
+grupos <- split(resistencia, f = voltagem)
+
+
+par(mfrow = c(2,2))
+plot(density(grupos$`1`), xlab="voltagem 1", main="")
+plot(density(grupos$`2`), xlab = "voltagem 2", main="")
+plot(density(grupos$`3`), xlab= "voltagem 3", main="")
+plot(density(grupos$`4`), xlab = "voltagem 4", main="")
+
+```
+A distribuição da variável resposta é assimetrica em cada nível de voltagem. \newline
+
+**Gráfico de perfis**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+agrupado<- vidros %>% group_by(voltagem, temperatura) 
+
+perfis <- agrupado %>% summarise(mean(resistencia))
+perfis$temperatura <- factor(perfis$temperatura)
+
+names(perfis)[3] = "resis_media"
+ggplot(perfis, aes(x=voltagem, y=resis_media, group = temperatura, colour=temperatura)) + geom_point() + geom_line() + ylab("Resistência média") + ggtitle("Há indícios de interação entre as variáveis voltagem e temperatura")
+```
+Como não temos paralelismo, aparentemente existe interação entre temperatura e voltagem. \newline
+
+
+**Modelo inicial sem interação**
+```{r}
+modelo_inicial <- lm(resistencia~voltagem+temperatura) 
+
+summary(modelo_inicial)
+```
+Todos os níveis de voltagem deram significativos, porém o coeficiente para o segundo nível de temperatura deu não significativo. \newline
+
+**Modelo com interação**
+```{r}
+interacao <- lm(resistencia~voltagem*temperatura)
+summary(interacao)
+```
+Adicionando interação ao modelo, temos um dos coeficientes de interação significativo porém um dos níveis de voltagem passou a ser não significativo. \newline
+
+**Tabela anova com interação**
+```{r}
+anova <- aov(resistencia~voltagem*temperatura)
+summary(anova)
+```
+
+
+**Gráfico de resíduos para o modelo sem interação**
+```{r echo=FALSE, fig.show="hold", out.width="50%"}
+fit.model = modelo_inicial
+#Gráfico resíduos
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+
+#envelope
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=1)
+```
+
+**Gráfico de resíduos para modelo com interação**
+```{r echo=FALSE, fig.show="hold", out.width="50%"}
+fit.model = interacao
+#Gráfico resíduos
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+
+#envelope
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=1)
+```
+
+Comparando os gráficos de resíduos dos dois modelos, não vemos grandes diferenças. A inclusão da interação ajudou a melhorar o ajuste de um ponto, mas mesmo assim o resíduo ficou fora da banda de confiança. \newpage
+
+
+**Distancia de cook**
+```{r echo=FALSE, results="hold", fig.show="hold"}
+#Distância de Cook
+#-----------------------------------------------------------------------#
+fit.model = interacao
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(di,xlab="Indice", ylab="Distancia de Cook", pch=16)
+cut = mean(di) + 3*sd(di)
+abline(cut,0,lty=2)
+
+indice <- 1:length(di)
+indice[di > cut]
+
+```
+A primeira observação do conjunto de dados é um possível ponto influente. \newline
+
+**Modelo com interação sem a 1ª observação**
+
+```{r echo=FALSE}
+vidros$voltagem <- factor(voltagem)
+vidros$temperatura <- factor(temperatura)
+
+#Análise de sensibilidade
+mod1 <- lm(formula = resistencia ~ voltagem*temperatura, data = subset(vidros, subset = 1:32!=1))
+
+summary(mod1)
+```
+Com a retirada dessa observação, o segundo nível de voltagem passou a ser significativo junto com a interação com a temperatura. Portanto, a obsegvação 1 é um ponto influente no conjunto de dados.
+
+

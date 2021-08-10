@@ -1,0 +1,235 @@
+---
+title: "Questão 7"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r include=FALSE}
+library(robustbase)
+library(ggplot2)
+```
+
+
+```{r include=FALSE}
+wine = read.table("wine.txt", header=TRUE)
+attach(wine)
+
+regiao = factor(regiao)
+```
+
+```{r}
+summary(wine)
+```
+
+**Distribuição da variável resposta**
+```{r fig.show='hold'}
+adjbox(qualidade, ylab="Qualidade")
+
+plot(density(qualidade), xlab="Qualidade", main="A distribuição da variável resposta não \nse afasta muito de uma distribuição normal")
+```
+\newpage
+**Relação entre variáveis explicativas e resposta**
+
+```{r echo=FALSE}
+adjbox(qualidade~regiao, xlab="região", ylab="qualidade")
+```
+
+```{r echo=FALSE}
+pairs(wine[,1:6], panel = panel.smooth, pch=16)
+
+```
+
+**Matrix de correlação**
+```{r echo=FALSE, warning=FALSE}
+
+cor(wine[,-7])
+```
+A variável **região** parece ter uma influência significativa na qualidade do vinho, visto que a distribuição dos boxplots diferem bastante de região pra região. As variáveis **aroma**, **sabor**, **corpo** têm correlação linear forte ou moderada com a variável resposta. \newpage
+
+      
+
+### Processo stepwise
+
+**Passo 1 - Modelos com uma variável explicativa**
+```{r, results='hold'}
+fit.claridade <- lm(qualidade~claridade)
+summary(fit.claridade)
+
+fit.aroma <- lm(qualidade~aroma)
+summary(fit.aroma)
+
+fit.corpo <- lm(qualidade~corpo)
+summary(fit.corpo)
+
+fit.sabor <- lm(qualidade~sabor)
+summary(fit.sabor)
+
+fit.aromac <- lm(qualidade~aromac)
+summary(fit.aromac)
+
+fit.regiao <- lm(qualidade~regiao)
+summary(fit.regiao)
+
+```
+
+**Resultado**: A variável *Sabor* entra no modelo. \newpage
+
+**Passo 2 - Modelos com sabor e mais uma variável explicativa**
+```{r, results="hold"}
+fit.SC <- lm(qualidade~sabor+claridade)
+summary(fit.SC)
+
+fit.SA <- lm(qualidade~sabor+aroma)
+summary(fit.SA)
+
+fit.SCo <- lm(qualidade~sabor+corpo)
+summary(fit.SCo)
+
+fit.SAc <- lm(qualidade~sabor+aromac)
+summary(fit.SAc)
+
+fit.SR <- lm(qualidade~sabor+regiao)
+summary(fit.SR)
+
+```
+
+**Resultado:** A variável *região* entra no modelo e *sabor* não sai. \newpage
+
+**Passo 3 - Modelos com sabor, região e mais uma variável explicativa**
+```{r results="hold"}
+fit.SRC <- lm(qualidade~sabor + regiao + claridade)
+summary(fit.SRC)
+
+fit.SRA <- lm(qualidade ~ sabor + regiao + aroma)
+summary(fit.SRA)
+
+fit.SRCo <- lm(qualidade~sabor + regiao + corpo)
+summary(fit.SRCo)
+
+fit.SRAc <- lm(qualidade~sabor + regiao + aromac)
+summary(fit.SRAc)
+
+
+```
+**Resultado:** A variável *aromac* entra no modelo, nenhuma sai. \newpage
+
+
+**Passo 4 - Modelos com sabor, região, aromac e mais uma variável explicativa**
+```{r results="hold"}
+fit.SRAcC <- lm(qualidade~sabor + regiao + aromac + claridade)
+summary(fit.SRAcC)
+
+fit.SRAcA <- lm(qualidade~sabor + regiao + aromac + aroma)
+summary(fit.SRAcA)
+
+fit.SRAcCo <- lm(qualidade~sabor + regiao + aromac + corpo)
+summary(fit.SRAcCo)
+```
+**Resultado:** Nenhuma variável entra no modelo. \newpage
+
+### Análise de resíduos e sensibilidade
+```{r echo=FALSE, fig.show="hold", out.width="50%"}
+summary(fit.SRAc)
+
+fit.model = fit.SRAc
+#Gráfico resíduos
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(fitted(fit.model),tsi,xlab="Valor Ajustado", 
+ylab="Residuo Studentizado", ylim=c(b-1,a+1), pch=16)
+
+#envelope
+par(mfrow=c(1,1))
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+si <- lm.influence(fit.model)$sigma
+r <- resid(fit.model)
+tsi <- r/(si*sqrt(1-h))
+#
+ident <- diag(n)
+epsilon <- matrix(0,n,100)
+e <- matrix(0,n,100)
+e1 <- numeric(n)
+e2 <- numeric(n)
+#
+for(i in 1:100){
+     epsilon[,i] <- rnorm(n,0,1)
+     e[,i] <- (ident - H)%*%epsilon[,i]
+     u <- diag(ident - H)
+     e[,i] <- e[,i]/sqrt(u)
+     e[,i] <- sort(e[,i]) }
+#
+for(i in 1:n){
+     eo <- sort(e[i,])
+     e1[i] <- (eo[2]+eo[3])/2
+     e2[i] <- (eo[97]+eo[98])/2 }
+#
+med <- apply(e,1,mean)
+faixa <- range(tsi,e1,e2)
+#
+par(pty="m")
+qqnorm(tsi,xlab="Percentil da N(0,1)",
+ylab="Residuo Studentizado", ylim=faixa, pch=16, main="")
+par(new=TRUE)
+qqnorm(e1,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(e2,axes=F,xlab="",ylab="", type="l",ylim=faixa,lty=1, main="",cex=1)
+par(new=TRUE)
+qqnorm(med,axes=F,xlab="",ylab="",type="l",ylim=faixa,lty=2, main="",cex=1)
+```
+**Comentário:** O modelo selecionado está bem ajustado, com todos os resíduos dentro da banda de confiança. A variância dos resíduos também parece ser constante e com média 0. Assim, as suposições do modelo foram atendidas. \newpage
+
+**Distância de Cook** 
+
+```{r echo=FALSE}
+#Distância de Cook
+#-----------------------------------------------------------------------#
+X <- model.matrix(fit.model)
+n <- nrow(X)
+p <- ncol(X)
+H <- X%*%solve(t(X)%*%X)%*%t(X)
+h <- diag(H)
+r <- resid(fit.model)
+s <- sqrt(sum(r*r)/(n-p))
+ts <- r/(s*sqrt(1-h))
+di <- (1/p)*(h/(1-h))*(ts^2)
+si <- lm.influence(fit.model)$sigma
+tsi <- r/(si*sqrt(1-h))
+a <- max(tsi)
+b <- min(tsi)
+#
+plot(di,xlab="Indice", ylab="Distancia de Cook", pch=16)
+cut = mean(di) + 3*sd(di)
+abline(cut,0,lty=2)
+
+indice <- 1:length(di)
+indice[di > cut]
+```
+A 20ª observação foi detectada na Distância de Cook e é suspeita de ser um ponto influente no modelo. 
+
+```{r}
+wine$regiao <- factor(regiao)
+
+#Análise de sensibilidade
+mod1 <- lm(formula = qualidade ~ sabor + regiao + aromac, data = subset(wine, subset = 1:38!=20))
+
+summary(mod1)
+```
+
+**Comentário:** A retirada da vigésima observação do modelo afetou consideravelmente o coeficiente da variável *aromac*. Portanto, podemos considerar essa observação como ponto influente.
